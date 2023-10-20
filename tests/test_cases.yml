@@ -1,0 +1,10 @@
+- input: |
+    import pydantic
+    
+    class User(pydantic.BaseModel):
+        name: str
+  output: |
+    import pydantic.v1 as v1_pydantic
+    
+    class User(v1_pydantic.BaseModel):
+        name: str

@@ -1,0 +1,10 @@
+version: 3
+
+tasks:
+    fmt:
+        cmds:
+            - poetry run black .
+
+    test:
+        cmds:
+            - poetry run pytest {{.CLI_ARGS}}

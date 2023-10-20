@@ -1,0 +1,10 @@
+- input: |
+      import foo, bar
+  output: |
+      import foo
+      import bar
+- input: |
+      import foo as fooo, bar as baar
+  output: |
+      import foo as fooo
+      import bar as baar
