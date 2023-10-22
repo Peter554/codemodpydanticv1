@@ -1,10 +1,213 @@
 - input: |
+    import foo
+  output: |
+    import foo
+
+- input: |
     import pydantic
-    
+  output: |
+    import pydantic.v1 as pydantic_v1
+
+- input: |
+    import pydantic.dataclasses
+  output: |
+    import pydantic.v1.dataclasses as pydantic_v1_dataclasses
+
+- input: |
+    import pydantic, foo
+  output: |
+    import pydantic.v1 as pydantic_v1, foo
+
+- input: |
+    import pydantic
+
     class User(pydantic.BaseModel):
         name: str
   output: |
-    import pydantic.v1 as v1_pydantic
-    
-    class User(v1_pydantic.BaseModel):
+    import pydantic.v1 as pydantic_v1
+
+    class User(pydantic_v1.BaseModel):
         name: str
+
+- input: |
+    import pydantic as pd
+
+    class User(pd.BaseModel):
+        name: str
+  output: |
+    import pydantic.v1 as pydantic_v1
+
+    class User(pydantic_v1.BaseModel):
+        name: str
+
+- input: |
+    import pydantic.dataclasses
+    
+    @pydantic.dataclasses.dataclass
+    class User:
+        name: str
+  output: |
+    import pydantic.v1.dataclasses as pydantic_v1_dataclasses
+
+    @pydantic_v1_dataclasses.dataclass
+    class User:
+        name: str
+
+- input: |
+    import pydantic.dataclasses as pd_dataclasses
+    
+    @pd_dataclasses.dataclass
+    class User:
+        name: str
+  output: |
+    import pydantic.v1.dataclasses as pydantic_v1_dataclasses
+
+    @pydantic_v1_dataclasses.dataclass
+    class User:
+        name: str
+
+- input: |
+    from foo import bar
+  output: |
+    from foo import bar
+
+- input: |
+    from pydantic import BaseModel
+  output: |
+    from pydantic.v1 import BaseModel as PydanticV1BaseModel
+
+- input: |
+    from pydantic import BaseModel
+    
+    class User(BaseModel):
+        name: str
+  output: |
+    from pydantic.v1 import BaseModel as PydanticV1BaseModel
+
+    class User(PydanticV1BaseModel):
+        name: str
+
+- input: |
+    from pydantic.dataclasses import dataclass
+  output: |
+    from pydantic.v1.dataclasses import dataclass as pydantic_v1_dataclass
+
+- input: |
+    from pydantic import dataclasses
+  output: |
+    from pydantic.v1 import dataclasses as pydantic_v1_dataclasses
+
+- input: |
+    from pydantic.dataclasses import dataclass as pd_dataclass
+  output: |
+    from pydantic.v1.dataclasses import dataclass as pydantic_v1_dataclass
+
+- input: |
+    from pydantic import dataclasses as pd_dataclasses
+  output: |
+    from pydantic.v1 import dataclasses as pydantic_v1_dataclasses
+
+- input: |
+    from pydantic.dataclasses import dataclass
+    
+    @dataclass
+    class User:
+        name: str
+  output: |
+    from pydantic.v1.dataclasses import dataclass as pydantic_v1_dataclass
+    
+    @pydantic_v1_dataclass
+    class User:
+        name: str
+
+- input: |
+    from pydantic import dataclasses
+    
+    @dataclasses.dataclass
+    class User:
+        name: str
+  output: |
+    from pydantic.v1 import dataclasses as pydantic_v1_dataclasses
+
+    @pydantic_v1_dataclasses.dataclass
+    class User:
+        name: str
+
+- input: |
+    from pydantic import dataclasses
+    
+    @dataclasses.dataclass(frozen=True)
+    class User:
+        name: str
+  output: |
+    from pydantic.v1 import dataclasses as pydantic_v1_dataclasses
+
+    @pydantic_v1_dataclasses.dataclass(frozen=True)
+    class User:
+        name: str
+
+- input: |
+    from pydantic.dataclasses import dataclass as pd_dataclass
+    
+    @pd_dataclass
+    class User:
+        name: str
+  output: |
+    from pydantic.v1.dataclasses import dataclass as pydantic_v1_dataclass
+    
+    @pydantic_v1_dataclass
+    class User:
+        name: str
+
+- input: |
+    from pydantic import dataclasses as pd_dataclasses
+    
+    @pd_dataclasses.dataclass
+    class User:
+        name: str
+  output: |
+    from pydantic.v1 import dataclasses as pydantic_v1_dataclasses
+
+    @pydantic_v1_dataclasses.dataclass
+    class User:
+        name: str
+
+- input: |
+    import pydantic
+    pydantic.dataclasses.dataclass
+  output: |
+    import pydantic.v1 as pydantic_v1
+    pydantic_v1.dataclasses.dataclass
+
+- input: |
+    import foo
+    import pydantic
+    from pydantic import dataclasses as pd_dataclasses, BaseModel as PdBaseModel
+
+    class User(PdBaseModel):
+        name: str
+
+    @pd_dataclasses.dataclass
+    class Admin:
+        name: str
+
+    try:
+        User()
+    except pydantic.ValidationError:
+        print("oops")
+  output: |
+    import foo
+    import pydantic.v1 as pydantic_v1
+    from pydantic.v1 import dataclasses as pydantic_v1_dataclasses, BaseModel as PydanticV1BaseModel
+
+    class User(PydanticV1BaseModel):
+        name: str
+
+    @pydantic_v1_dataclasses.dataclass
+    class Admin:
+        name: str
+
+    try:
+        User()
+    except pydantic_v1.ValidationError:
+        print("oops")

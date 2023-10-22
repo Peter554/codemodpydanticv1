@@ -1,10 +1,34 @@
-version: 3
+version: '3'
+
+output: prefixed
 
 tasks:
-    fmt:
-        cmds:
-            - poetry run black .
+  install-pre-commit:
+    cmds:
+      - cp .pre-commit .git/hooks/pre-commit
+      - chmod +x .git/hooks/pre-commit
 
-    test:
-        cmds:
-            - poetry run pytest {{.CLI_ARGS}}
+  pre-commit:
+    cmds:
+      - echo Stashing unstaged changes... && git diff > /tmp/diff && git apply --allow-empty --reverse /tmp/diff
+      - defer: echo Restoring unstaged changes... && git apply --allow-empty /tmp/diff
+      - task: check
+
+  fmt:
+    cmds:
+      - poetry run black .
+      - poetry run ruff check --fix .
+
+  check:
+    cmds:
+      - task: lint
+      - task: test
+
+  lint:
+    cmds:
+      - poetry run black . --check
+      - poetry run ruff check .
+
+  test:
+    cmds:
+      - poetry run pytest {{.CLI_ARGS}}

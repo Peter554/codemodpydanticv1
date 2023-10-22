@@ -1,0 +1,20 @@
+name: CI
+on:
+  push:
+jobs:
+  check-code:
+    name: Check the code
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+      - name: Install taskfile
+        run: sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+      - name: Install poetry
+        run: curl -sSL https://install.python-poetry.org | python -
+      - name: Install Python dependencies
+        run: poetry install
+      - name: Check
+        run: task check
