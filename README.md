@@ -12,3 +12,12 @@ pip install codemodpydanticv1
 
 codemodpydanticv1 <file>
 ```
+
+Using [ripgrep](https://github.com/BurntSushi/ripgrep) and looping over files:
+
+```sh
+for file in $(rg pydantic -g '*.py' -l); do
+    echo $file
+    codemodpydanticv1 $file
+done
+```
