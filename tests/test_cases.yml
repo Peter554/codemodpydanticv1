@@ -211,3 +211,19 @@
         User()
     except pydantic_v1.ValidationError:
         print("oops")
+- input: |
+    from pydantic import BaseModel
+    from pydantic.dataclasses import dataclass
+    print(BaseModel.__class__)
+    print(dataclass.__class__)
+  output: |
+    from pydantic.v1 import BaseModel as PydanticV1BaseModel
+    from pydantic.v1.dataclasses import dataclass as pydantic_v1_dataclass
+    print(PydanticV1BaseModel.__class__)
+    print(pydantic_v1_dataclass.__class__)
+- input: |
+    from pydantic import dataclasses
+    print(dataclasses)
+  output: |
+    from pydantic.v1 import dataclasses as pydantic_v1_dataclasses
+    print(pydantic_v1_dataclasses)

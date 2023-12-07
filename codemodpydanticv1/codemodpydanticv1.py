@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import dataclasses
-import functools
-import importlib
 import logging
 import sys
 
@@ -17,18 +15,6 @@ def transform_code(code: str) -> str:
     wrapper = cst.MetadataWrapper(tree)
     tree = wrapper.visit(_PydanticV1Transformer())
     return tree.code
-
-
-@dataclasses.dataclass(frozen=True)
-class _NameReplacementRule:
-    _name: str
-    _replace: str
-
-    def matches(self, name: cst.Name) -> bool:
-        return name.value == self._name
-
-    def replace(self, name: cst.Name) -> cst.Name:
-        return cst.Name(self._replace)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -47,14 +33,27 @@ class _AttributeReplacementRule:
         )
 
 
+@dataclasses.dataclass(frozen=True)
+class _NameReplacementRule:
+    _name: str
+    _replace: str
+
+    def matches(self, name: cst.Name) -> bool:
+        return name.value == self._name
+
+    def replace(self, name: cst.Name) -> cst.Name:
+        return cst.Name(self._replace)
+
+
 class _PydanticV1Transformer(m.MatcherDecoratableTransformer):
     METADATA_DEPENDENCIES = (cst.metadata.QualifiedNameProvider,)
 
     def __init__(self) -> None:
         super().__init__()
-        self._name_replacements: list[_NameReplacementRule] = []
         self._attribute_replacements: list[_AttributeReplacementRule] = []
+        self._name_replacements: list[_NameReplacementRule] = []
 
+    # import pydantic
     @m.call_if_inside(m.Import())
     @m.leave(m.ImportAlias(m.Name("pydantic")))
     def update_pydantic_import(
@@ -73,6 +72,7 @@ class _PydanticV1Transformer(m.MatcherDecoratableTransformer):
             asname=cst.AsName(cst.Name("pydantic_v1")),
         )
 
+    # import pydantic.foo
     @m.call_if_inside(m.Import())
     @m.leave(m.ImportAlias(m.Attribute(m.Name("pydantic"))))
     def update_pydantic_submodule_import(
@@ -92,59 +92,46 @@ class _PydanticV1Transformer(m.MatcherDecoratableTransformer):
             asname=cst.AsName(cst.Name(f"pydantic_v1_{submodule_name.value}")),
         )
 
+    # from pydantic import foo
     @m.leave(m.ImportFrom(module=m.Name("pydantic")))
     def update_pydantic_importfrom(
         self, original_node: cst.ImportFrom, updated_node: cst.ImportFrom
     ) -> cst.ImportFrom:
         import_aliases: list[cst.ImportAlias] = []
         for import_alias in original_node.names:
-            full_import = (
-                _to_string(original_node.module) + "." + import_alias.name.value
-            )
-            if _is_module("pydantic.v1." + full_import.split(".", maxsplit=1)[1]):
-                self._attribute_replacements.append(
-                    _AttributeReplacementRule(
-                        _to_string(
-                            import_alias.asname.name
-                            if import_alias.asname
-                            else import_alias.name
-                        ),
-                        f"pydantic_v1_{import_alias.name.value}.{{}}",
-                    )
-                )
-                import_aliases.append(
-                    cst.ImportAlias(
-                        name=import_alias.name,
-                        asname=cst.AsName(
-                            cst.Name(f"pydantic_v1_{import_alias.name.value}")
-                        ),
-                    )
-                )
-            else:
-                self._name_replacements.append(
-                    _NameReplacementRule(
-                        import_alias.asname.name.value
+            self._attribute_replacements.append(
+                _AttributeReplacementRule(
+                    _to_string(
+                        import_alias.asname.name
                         if import_alias.asname
-                        else import_alias.name.value,
-                        self._rename_direct_import(import_alias.name.value),
-                    )
+                        else import_alias.name
+                    ),
+                    f"{self._rename_direct_import(import_alias.name.value)}.{{}}",
                 )
-                import_aliases.append(
-                    cst.ImportAlias(
-                        name=import_alias.name,
-                        asname=cst.AsName(
-                            cst.Name(
-                                self._rename_direct_import(import_alias.name.value)
-                            )
-                        ),
-                    )
+            )
+            self._name_replacements.append(
+                _NameReplacementRule(
+                    import_alias.asname.name.value
+                    if import_alias.asname
+                    else import_alias.name.value,
+                    self._rename_direct_import(import_alias.name.value),
                 )
+            )
+            import_aliases.append(
+                cst.ImportAlias(
+                    name=import_alias.name,
+                    asname=cst.AsName(
+                        cst.Name(self._rename_direct_import(import_alias.name.value))
+                    ),
+                )
+            )
 
         return cst.ImportFrom(
             module=_to_attribute("pydantic.v1"),
             names=import_aliases,
         )
 
+    # from pydantic.foo import bar
     @m.leave(m.ImportFrom(module=m.Attribute(m.Name("pydantic"))))
     def update_pydantic_submodule_importfrom(
         self, original_node: cst.ImportFrom, updated_node: cst.ImportFrom
@@ -152,6 +139,16 @@ class _PydanticV1Transformer(m.MatcherDecoratableTransformer):
         submodule_name = original_node.module.attr
         import_aliases: list[cst.ImportAlias] = []
         for import_alias in original_node.names:
+            self._attribute_replacements.append(
+                _AttributeReplacementRule(
+                    _to_string(
+                        import_alias.asname.name
+                        if import_alias.asname
+                        else import_alias.name
+                    ),
+                    f"{self._rename_direct_import(import_alias.name.value)}.{{}}",
+                )
+            )
             self._name_replacements.append(
                 _NameReplacementRule(
                     import_alias.asname.name.value
@@ -236,18 +233,3 @@ def _to_attribute(s: str) -> cst.Attribute | cst.Name:
         left, right = s.rsplit(".", maxsplit=1)
         return cst.Attribute(value=_to_attribute(left), attr=cst.Name(value=right))
     return cst.Name(value=s)
-
-
-@functools.cache
-def _is_module(s: str) -> bool:
-    try:
-        importlib.import_module(s)
-    except ModuleNotFoundError:
-        logging.debug(f"{s} is not a module")
-        return False
-    except Exception as e:
-        logging.debug(f"{s} is a module (error: {e})")
-        return True
-    else:
-        logging.debug(f"{s} is a module")
-        return True
