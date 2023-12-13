@@ -76,6 +76,11 @@ class _PydanticV1Transformer(m.MatcherDecoratableTransformer):
     def update_pydantic_submodule_import(
         self, original_node: cst.ImportAlias, updated_node: cst.ImportAlias
     ) -> cst.ImportAlias:
+        if _to_string(original_node.name) == "pydantic.v1" or _to_string(
+            original_node.name
+        ).startswith("pydantic.v1."):
+            return updated_node
+
         submodule_name = original_node.name.attr
         if original_node.asname:
             self._name_replacements.append(
@@ -130,6 +135,11 @@ class _PydanticV1Transformer(m.MatcherDecoratableTransformer):
     def update_pydantic_submodule_importfrom(
         self, original_node: cst.ImportFrom, updated_node: cst.ImportFrom
     ) -> cst.ImportFrom:
+        if _to_string(original_node.module) == "pydantic.v1" or _to_string(
+            original_node.module
+        ).startswith("pydantic.v1."):
+            return updated_node
+
         submodule_name = original_node.module.attr
         import_aliases: list[cst.ImportAlias] = []
         for import_alias in original_node.names:
