@@ -18,22 +18,6 @@ def transform_code(code: str) -> str:
 
 
 @dataclasses.dataclass(frozen=True)
-class _AttributeReplacementRule:
-    _module: str
-    _replace: str
-
-    def matches(self, attribute: cst.Attribute) -> bool:
-        s = _to_string(attribute)
-        return s.startswith(self._module + ".")
-
-    def replace(self, attribute: cst.Attribute) -> cst.Attribute:
-        s = _to_string(attribute)
-        return _to_attribute(
-            self._replace.format(s.split(".", maxsplit=self._module.count(".") + 1)[-1])
-        )
-
-
-@dataclasses.dataclass(frozen=True)
 class _NameReplacementRule:
     _name: str
     _replace: str
@@ -45,13 +29,25 @@ class _NameReplacementRule:
         return cst.Name(self._replace)
 
 
+@dataclasses.dataclass(frozen=True)
+class _AttributeReplacementRule:
+    _attribute: str
+    _replace: str
+
+    def matches(self, attribute: cst.Attribute) -> bool:
+        return _to_string(attribute) == self._attribute
+
+    def replace(self, attribute: cst.Attribute) -> cst.Attribute:
+        return _to_attribute(self._replace)
+
+
 class _PydanticV1Transformer(m.MatcherDecoratableTransformer):
     METADATA_DEPENDENCIES = (cst.metadata.QualifiedNameProvider,)
 
     def __init__(self) -> None:
         super().__init__()
-        self._attribute_replacements: list[_AttributeReplacementRule] = []
         self._name_replacements: list[_NameReplacementRule] = []
+        self._attribute_replacements: list[_AttributeReplacementRule] = []
 
     # import pydantic
     @m.call_if_inside(m.Import())
@@ -59,12 +55,12 @@ class _PydanticV1Transformer(m.MatcherDecoratableTransformer):
     def update_pydantic_import(
         self, original_node: cst.ImportAlias, updated_node: cst.ImportAlias
     ) -> cst.ImportAlias:
-        self._attribute_replacements.append(
-            _AttributeReplacementRule(
+        self._name_replacements.append(
+            _NameReplacementRule(
                 original_node.asname.name.value
                 if original_node.asname
                 else original_node.name.value,
-                "pydantic_v1.{}",
+                "pydantic_v1",
             )
         )
         return cst.ImportAlias(
@@ -73,20 +69,28 @@ class _PydanticV1Transformer(m.MatcherDecoratableTransformer):
         )
 
     # import pydantic.foo
+    # This case is a bit more complex, since we want to replace an
+    # attribute (e.g. pydantic.foo.bar) with a name (e.g. pydantic_v1_foo.bar).
     @m.call_if_inside(m.Import())
     @m.leave(m.ImportAlias(m.Attribute(m.Name("pydantic"))))
     def update_pydantic_submodule_import(
         self, original_node: cst.ImportAlias, updated_node: cst.ImportAlias
     ) -> cst.ImportAlias:
         submodule_name = original_node.name.attr
-        self._attribute_replacements.append(
-            _AttributeReplacementRule(
-                original_node.asname.name.value
-                if original_node.asname
-                else f"pydantic.{submodule_name.value}",
-                f"pydantic_v1_{submodule_name.value}.{{}}",
+        if original_node.asname:
+            self._name_replacements.append(
+                _NameReplacementRule(
+                    original_node.asname.name.value,
+                    f"pydantic_v1_{submodule_name.value}",
+                )
             )
-        )
+        else:
+            self._attribute_replacements.append(
+                _AttributeReplacementRule(
+                    f"pydantic.{submodule_name.value}",
+                    f"pydantic_v1_{submodule_name.value}",
+                )
+            )
         return cst.ImportAlias(
             name=_to_attribute(f"pydantic.v1.{submodule_name.value}"),
             asname=cst.AsName(cst.Name(f"pydantic_v1_{submodule_name.value}")),
@@ -99,16 +103,6 @@ class _PydanticV1Transformer(m.MatcherDecoratableTransformer):
     ) -> cst.ImportFrom:
         import_aliases: list[cst.ImportAlias] = []
         for import_alias in original_node.names:
-            self._attribute_replacements.append(
-                _AttributeReplacementRule(
-                    _to_string(
-                        import_alias.asname.name
-                        if import_alias.asname
-                        else import_alias.name
-                    ),
-                    f"{self._rename_direct_import(import_alias.name.value)}.{{}}",
-                )
-            )
             self._name_replacements.append(
                 _NameReplacementRule(
                     import_alias.asname.name.value
@@ -139,16 +133,6 @@ class _PydanticV1Transformer(m.MatcherDecoratableTransformer):
         submodule_name = original_node.module.attr
         import_aliases: list[cst.ImportAlias] = []
         for import_alias in original_node.names:
-            self._attribute_replacements.append(
-                _AttributeReplacementRule(
-                    _to_string(
-                        import_alias.asname.name
-                        if import_alias.asname
-                        else import_alias.name
-                    ),
-                    f"{self._rename_direct_import(import_alias.name.value)}.{{}}",
-                )
-            )
             self._name_replacements.append(
                 _NameReplacementRule(
                     import_alias.asname.name.value
@@ -170,6 +154,26 @@ class _PydanticV1Transformer(m.MatcherDecoratableTransformer):
             names=import_aliases,
         )
 
+    def leave_Name(
+        self, original_node: cst.Name, updated_node: cst.Name
+    ) -> cst.BaseExpression:
+        qualified_name = self._get_qualified_name(original_node)
+        if (
+            not qualified_name
+            or qualified_name.source != cst.metadata.QualifiedNameSource.IMPORT
+            or not (
+                qualified_name.name == "pydantic"
+                or qualified_name.name.startswith("pydantic.")
+            )
+        ):
+            return updated_node
+
+        for replacement in self._name_replacements:
+            if replacement.matches(original_node):
+                return replacement.replace(original_node)
+
+        return updated_node
+
     def leave_Attribute(
         self, original_node: cst.Attribute, updated_node: cst.Attribute
     ) -> cst.BaseExpression:
@@ -185,25 +189,7 @@ class _PydanticV1Transformer(m.MatcherDecoratableTransformer):
             if replacement.matches(original_node):
                 return replacement.replace(original_node)
 
-        return original_node
-
-    @m.call_if_not_inside(m.Attribute())
-    def leave_Name(
-        self, original_node: cst.Name, updated_node: cst.Name
-    ) -> cst.BaseExpression:
-        qualified_name = self._get_qualified_name(original_node)
-        if (
-            not qualified_name
-            or qualified_name.source != cst.metadata.QualifiedNameSource.IMPORT
-            or not qualified_name.name.startswith("pydantic.")
-        ):
-            return original_node
-
-        for replacement in self._name_replacements:
-            if replacement.matches(original_node):
-                return replacement.replace(original_node)
-
-        return original_node
+        return updated_node
 
     @staticmethod
     def _rename_direct_import(s: str) -> str:
