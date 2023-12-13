@@ -3,9 +3,9 @@ version: '3'
 output: prefixed
 
 tasks:
-  install-pre-commit:
+  pre-commit.install:
     cmds:
-      - cp .pre-commit .git/hooks/pre-commit
+      - echo task pre-commit > .git/hooks/pre-commit
       - chmod +x .git/hooks/pre-commit
 
   pre-commit:
@@ -19,11 +19,6 @@ tasks:
       - poetry run black .
       - poetry run ruff check --fix .
 
-  check:
-    cmds:
-      - task: lint
-      - task: test
-
   lint:
     cmds:
       - poetry run black . --check
@@ -32,3 +27,8 @@ tasks:
   test:
     cmds:
       - poetry run pytest {{.CLI_ARGS}}
+
+  check:
+    cmds:
+      - task: lint
+      - task: test
